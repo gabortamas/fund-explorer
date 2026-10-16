@@ -1,0 +1,25 @@
+isin,name,issuer,asset_class,language,kid_url,notes
+IE00B4L5Y983,iShares Core MSCI World UCITS ETF (Acc),iShares,equity,en,,global developed; name unverified
+IE00B0M62Q58,iShares MSCI World UCITS ETF (Dist),iShares,equity,en,,same index as Core MSCI World but distributing; name unverified
+IE00B6R52259,iShares MSCI ACWI UCITS ETF (Acc),iShares,equity,en,,developed + emerging; name unverified
+IE00B5BMR087,iShares Core S&P 500 UCITS ETF (Acc),iShares,equity,en,,US large cap; name unverified
+IE00B53SZB19,iShares NASDAQ 100 UCITS ETF (Acc),iShares,equity,en,,US tech-heavy; name unverified
+IE00B4K48X80,iShares Core MSCI Europe UCITS ETF (Acc),iShares,equity,en,,Europe; name unverified
+IE00B1YZSC51,iShares Core MSCI Europe UCITS ETF (Dist),iShares,equity,en,,Europe distributing; name unverified
+IE00BKM4GZ66,iShares Core MSCI EM IMI UCITS ETF (Acc),iShares,equity,en,,emerging incl. small cap; name unverified
+IE00B4L5YC18,iShares MSCI EM UCITS ETF (Acc),iShares,equity,en,,emerging; name unverified
+IE00B0M63177,iShares MSCI EM UCITS ETF (Dist),iShares,equity,en,,emerging distributing; name unverified
+IE00BF4RFH31,iShares MSCI World Small Cap UCITS ETF (Acc),iShares,equity,en,,small cap; name unverified
+IE00BP3QZ601,iShares Edge MSCI World Quality Factor UCITS ETF (Acc),iShares,equity,en,,factor; name unverified
+IE00BP3QZ825,iShares Edge MSCI World Momentum Factor UCITS ETF (Acc),iShares,equity,en,,factor; name unverified
+IE00B8FHGS14,iShares Edge MSCI World Minimum Volatility UCITS ETF (Acc),iShares,equity,en,,factor low volatility; name unverified
+IE00B0M62S72,iShares Euro Dividend UCITS ETF (Dist),iShares,equity,en,,dividend; name unverified
+IE00BYZK4552,iShares Automation & Robotics UCITS ETF (Acc),iShares,equity,en,,thematic; name unverified
+IE00B1XNHC34,iShares Global Clean Energy UCITS ETF (Dist),iShares,equity,en,,thematic; name unverified
+IE00B3WJKG14,iShares S&P 500 Information Technology Sector UCITS ETF (Acc),iShares,equity,en,,sector; name unverified
+IE00B1FZS350,iShares Developed Markets Property Yield UCITS ETF (Dist),iShares,property,en,,real estate; name unverified
+IE00B3F81R35,iShares Core EUR Corp Bond UCITS ETF (Dist),iShares,bond,en,,euro corporate bonds; name unverified
+IE00B4WXJJ64,iShares Core EUR Govt Bond UCITS ETF (Dist),iShares,bond,en,,euro government bonds; name unverified
+IE00BDBRDM35,iShares Core Global Aggregate Bond UCITS ETF EUR Hedged (Acc),iShares,bond,en,,global bonds currency hedged; name unverified
+IE00BGSF1X88,iShares $ Treasury Bond 0-1yr UCITS ETF (Acc),iShares,bond,en,,very short US treasuries; name unverified
+IE00B3VWN518,iShares $ Treasury Bond 7-10yr UCITS ETF (Acc),iShares,bond,en,,intermediate US treasuries; name unverified
