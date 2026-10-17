@@ -1,5 +1,5 @@
 isin,name,issuer,asset_class,language,kid_url,notes
-IE00B4L5Y983,iShares Core MSCI World UCITS ETF (Acc),iShares,equity,en,,global developed; name unverified
+IE00B4L5Y983,iShares Core MSCI World UCITS ETF (Acc),iShares,equity,en,https://www.blackrock.com/gls-download/literature/kiid/eu-priips-ishares-core-msci-world-ucits-etf-ie00b4l5y983-en.pdf,global developed; name unverified
 IE00B0M62Q58,iShares MSCI World UCITS ETF (Dist),iShares,equity,en,,same index as Core MSCI World but distributing; name unverified
 IE00B6R52259,iShares MSCI ACWI UCITS ETF (Acc),iShares,equity,en,,developed + emerging; name unverified
 IE00B5BMR087,iShares Core S&P 500 UCITS ETF (Acc),iShares,equity,en,,US large cap; name unverified
