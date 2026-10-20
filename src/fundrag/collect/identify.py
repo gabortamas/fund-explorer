@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
-from pypdf import PdfReader
+import pdfplumber
 
 # ---------------------------------------------------------------------------
 # ISINs
@@ -161,16 +161,28 @@ class PdfInspection:
 
 
 def extract_text(path: Path, max_pages: int = 4) -> tuple[str, int]:
-    reader = PdfReader(str(path))
-    pages = reader.pages[:max_pages]
-    return "\n".join((p.extract_text() or "") for p in pages), len(reader.pages)
+    with pdfplumber.open(str(path)) as pdf:
+        pages = pdf.pages[:max_pages]
+        return "\n".join((p.extract_text() or "") for p in pages), len(pdf.pages)
+
+
+# KIDs name the product as: <name> (the "Fund"), <share class> (the "Share Class"), ...
+_FUND_NAME = re.compile(r"^(?P<name>.+?)\s*\(the [“\"]Fund[”\"]\)")
+
+
+def guess_title(text: str) -> str | None:
+    for line in text.splitlines():
+        m = _FUND_NAME.match(line.strip())
+        if m:
+            return m.group("name")
+    return next((ln.strip() for ln in text.splitlines() if "ucits etf" in ln.lower()), None)
 
 
 def inspect_text(text: str, n_pages: int = 0) -> PdfInspection:
     doc_type, conf = classify(text)
     isins = find_isins(text)
     doc_date, cued = find_document_date(text)
-    title = next((ln.strip() for ln in text.splitlines() if "ucits etf" in ln.lower()), None)
+    title = guess_title(text)
 
     problems = []
     if doc_type != "priips_kid":
@@ -190,6 +202,6 @@ def inspect_text(text: str, n_pages: int = 0) -> PdfInspection:
 def inspect_pdf(path: Path) -> PdfInspection:
     try:
         text, n_pages = extract_text(path)
-    except Exception as exc:  # noqa: BLE001 - pypdf raises many types; report, don't crash
+    except Exception as exc:  # noqa: BLE001 - PDF libs raise many types; report, don't crash
         return PdfInspection("unknown", 0.0, problems=[f"could not read PDF: {exc}"])
     return inspect_text(text, n_pages)

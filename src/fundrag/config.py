@@ -16,6 +16,7 @@ UNIVERSE_DIR = DATA_DIR / "universe"
 RAW_DIR = DATA_DIR / "raw"  # downloaded PDFs, one folder per issuer/ISIN
 INBOX_DIR = DATA_DIR / "inbox"  # drop manually downloaded PDFs here
 MANIFEST_PATH = DATA_DIR / "manifest.jsonl"  # one line per stored document version
+PROCESSED_DIR = DATA_DIR / "processed"  # parsed text and, later, extracted fields
 
 USER_AGENT = (
     "fundrag-research/0.1 (personal non-commercial research project; "

@@ -10,6 +10,7 @@ particular issuer's website happens to work this month.
 
 from __future__ import annotations
 
+import re
 import tempfile
 import time
 from dataclasses import dataclass
@@ -31,11 +32,32 @@ class Outcome:
     record: manifest.ManifestRecord | None = None
 
 
+# Issuer adapters: tiny rules that turn a link you found into one that works without
+# cookies. The first collector layer: plain code, no LLM, for cases a rule can solve.
+_ISHARES_LITERATURE = re.compile(
+    r"^https?://(?:www\.)?ishares\.com/.+?/(?P<path>literature/(?:kiid|fact-sheet)/.+\.pdf)$",
+    re.IGNORECASE,
+)
+
+
+def normalize_url(url: str) -> str:
+    """Rewrite iShares country-site links to BlackRock's direct file server.
+
+    ishares.com/<country>/<investor type>/<lang>/literature/kiid/x.pdf sits behind an
+    investor-type pop-up that needs a browser cookie; the same file is served without
+    one at blackrock.com/gls-download/literature/kiid/x.pdf.
+    """
+    m = _ISHARES_LITERATURE.match(url.strip())
+    if m:
+        return f"https://www.blackrock.com/gls-download/{m.group('path')}"
+    return url.strip()
+
+
 def download_url(product: Product, client: httpx.Client, **store_kwargs) -> Outcome:
     if not product.kid_url:
         return Outcome(product.isin, "skipped", "no kid_url in universe")
     try:
-        resp = client.get(product.kid_url, follow_redirects=True)
+        resp = client.get(normalize_url(product.kid_url), follow_redirects=True)
         resp.raise_for_status()
     except httpx.HTTPError as exc:
         return Outcome(product.isin, "failed", f"HTTP error: {exc}")
