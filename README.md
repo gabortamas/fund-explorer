@@ -29,12 +29,30 @@ Document (KID). The assistant informs; it does not recommend what to buy.
 | 9 | UI, tracing, write-up | |
 | 10 | Collector agent: ISIN in, verified KID out (evaluated against the hand-collected links) | |
 
+## Infrastructure track
+
+Alongside the RAG steps, the project is a hands-on tutorial in serving and running it:
+
+| Stage | Component | Status |
+|---|---|---|
+| A | Housekeeping: locked dependencies, data path that works in containers, GitHub remote | done |
+| B | Read-only REST API (FastAPI) over the corpus | done |
+| C | Docker image, then Docker Compose with Postgres and MinIO | |
+| D | Airflow DAG: collect, identify, parse, one task per fund | |
+| E | Kubernetes, Helm, Airflow on Kubernetes, Argo Workflows | |
+
 ## Setup
 
 ```bash
-uv venv && uv pip install -e ".[dev]"     # or: python -m venv .venv && pip install -e ".[dev]"
-pytest
+uv sync --extra dev     # creates .venv with the exact versions in uv.lock
+uv run pytest
 ```
+
+`uv.lock` pins every package to an exact version. After changing the dependencies in
+`pyproject.toml`, run `uv lock` and commit both files.
+
+The data folder is `FUNDRAG_DATA_DIR` if that environment variable is set, otherwise
+`data/` in this checkout.
 
 ## Step 1: collecting KIDs
 
@@ -75,6 +93,24 @@ for citations. Text comes from pdfplumber, which keeps each table row on one lin
 
 `tests/test_corpus.py` runs the parser on your real KIDs; a KID with an unusual layout
 shows up as a failing test named after its ISIN.
+
+## The REST API
+
+```bash
+uv run fundrag serve --reload     # then open http://127.0.0.1:8000/docs
+```
+
+| Method and path | What it returns |
+|---|---|
+| `GET /health` | `{"status": "ok"}`; used by Docker and Kubernetes health checks later |
+| `GET /v1/funds?asset_class=&kid_available=&limit=&offset=` | Page of funds with KID status |
+| `GET /v1/funds/{isin}` | One fund and the provenance of its latest KID |
+| `GET /v1/funds/{isin}/kid` | The KID's sections, without text |
+| `GET /v1/funds/{isin}/kid/sections/{key}` | One section with text and pages |
+
+An ISIN with a wrong check digit gets `422`; a fund or KID that does not exist gets
+`404`. The code is in `src/fundrag/api/`; `tests/test_api.py` runs against a small
+temporary data folder.
 
 ## Data and licensing
 

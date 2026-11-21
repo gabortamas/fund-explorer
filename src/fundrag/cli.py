@@ -17,8 +17,7 @@ from fundrag.parse import pipeline
 
 app = typer.Typer(help="Fund research assistant: corpus tools.", no_args_is_help=True)
 
-DEFAULT_UNIVERSE = config.UNIVERSE_DIR / "ishares_v1.csv"
-UniverseOpt = typer.Option(DEFAULT_UNIVERSE, "--universe", "-u", help="Universe CSV")
+UniverseOpt = typer.Option(config.DEFAULT_UNIVERSE, "--universe", "-u", help="Universe CSV")
 VerboseOpt = typer.Option(False, "--verbose", "-v", help="Also list skipped rows")
 
 
@@ -111,6 +110,18 @@ def show(isin: str, section: str = typer.Argument(None, help="Section key, e.g. 
     if section and not doc.section(section):
         keys = ", ".join(s.key for s in doc.sections)
         typer.echo(f"No section '{section}'. Available: {keys}")
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", help="0.0.0.0 makes it reachable from outside"),
+    port: int = typer.Option(8000, help="Port number"),
+    reload: bool = typer.Option(False, help="Restart automatically when you edit the code"),
+) -> None:
+    """Start the REST API. Then open http://127.0.0.1:8000/docs in your browser."""
+    import uvicorn  # imported here so the other commands start fast
+
+    uvicorn.run("fundrag.api.app:app", host=host, port=port, reload=reload)
 
 
 if __name__ == "__main__":
