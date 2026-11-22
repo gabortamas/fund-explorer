@@ -1,0 +1,23 @@
+# Files Docker must NOT send into the build. Keeps the image small, the build fast,
+# and private things out of the image.
+
+# Your Windows virtual environment: useless (and broken) inside a Linux container.
+.venv/
+
+# The data: copyrighted KIDs, and it is attached at run time instead (-v ...:/data).
+data/
+
+# Version history, caches and editor settings.
+.git/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+.vscode/
+
+# Secrets must never end up in an image.
+.env
+
+# Not needed to run the API.
+tests/
+Dockerfile
+.dockerignore

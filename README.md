@@ -4,6 +4,47 @@ A portfolio project: help ordinary investors understand and compare EU retail fu
 using the documents every such fund must publish, mainly the PRIIPs Key Information
 Document (KID). The assistant informs; it does not recommend what to buy.
 
+## Current state and next steps (as of 22 Nov 2026)
+
+**Where things stand**
+
+- **Corpus:** 24 iShares funds in `data/universe/ishares_v1.csv`; 3 of them have a KID
+  (IE00B4L5Y983 MSCI World, IE00B4WXJJ64 EUR Govt Bond, IE00B1XNHC34 Global Clean
+  Energy Transition), all dated 2026-09-03 and parsed into sections. Their links were
+  found by hand. The other 21 have no `kid_url` yet: iShares links contain the fund
+  name, so they cannot be built from the ISIN alone.
+- **RAG track:** steps 1 (collection) and 2 (parsing) done. No LLM calls yet.
+- **Infrastructure track:** stages A (housekeeping) and B (read-only REST API) done;
+  stage C has its first part, the `Dockerfile`.
+- **Tests:** 36, all passing (`uv run pytest`).
+- **Environment:** Windows laptop, project in `C:\Projects\fund_explorer`, Python 3.14,
+  uv, Docker Desktop on WSL 2. Code on GitHub: `gabortamas/fund-explorer` (public;
+  the KID files stay local).
+
+**Known limits of the current design**
+
+- The manifest is a JSONL file appended to by whichever process runs. Two processes
+  writing at once (parallel Airflow tasks, several containers) could corrupt it.
+- PDFs and parsed files live in local folders, which containers in Kubernetes do not
+  share by default.
+- Finding KID links is manual, so the corpus cannot grow without someone searching.
+
+**Next steps, in order**
+
+1. **Stage C, part 2: Docker Compose with Postgres.** One `docker-compose.yml` that
+   starts the API and a Postgres database together. Move the manifest from
+   `manifest.jsonl` into a Postgres table, with a one-off script that imports the
+   existing records. In the API only `src/fundrag/api/store.py` should need to change.
+   File storage (MinIO) comes after that.
+2. **Collector (step 10, moved forward).** Input: an ISIN; output: a verified KID.
+   First a plain rule that reads the issuer's own fund listings, then an agent (Claude
+   API with web search) for funds the rule cannot handle. Every candidate PDF must pass
+   the existing checks in `collect/identify.py` before it is stored. Evaluated against
+   the three hand-collected links.
+3. **Stage D: Airflow.** A DAG that collects, identifies and parses, one mapped task
+   per fund, running in Docker Compose.
+4. **RAG steps 3 onwards**, each adding a DAG task and an API endpoint as it lands.
+
 ## Architecture (target)
 
 - **Ingestion (offline):** collect → parse → extract structured KID fields → chunk → index
@@ -37,7 +78,7 @@ Alongside the RAG steps, the project is a hands-on tutorial in serving and runni
 |---|---|---|
 | A | Housekeeping: locked dependencies, data path that works in containers, GitHub remote | done |
 | B | Read-only REST API (FastAPI) over the corpus | done |
-| C | Docker image, then Docker Compose with Postgres and MinIO | |
+| C | Docker image, then Docker Compose with Postgres and MinIO | image done |
 | D | Airflow DAG: collect, identify, parse, one task per fund | |
 | E | Kubernetes, Helm, Airflow on Kubernetes, Argo Workflows | |
 
@@ -111,6 +152,18 @@ uv run fundrag serve --reload     # then open http://127.0.0.1:8000/docs
 An ISIN with a wrong check digit gets `422`; a fund or KID that does not exist gets
 `404`. The code is in `src/fundrag/api/`; `tests/test_api.py` runs against a small
 temporary data folder.
+
+## Running the API in Docker
+
+```bash
+docker build -t fund-explorer-api .
+docker run --rm -p 8000:8000 -v "${PWD}/data:/data" fund-explorer-api
+```
+
+The image holds the code and its exact dependencies but no data. `-v` attaches the
+local `data/` folder at `/data` inside the container (where `FUNDRAG_DATA_DIR` points),
+and `-p 8000:8000` connects port 8000 on the host to the API in the container. The
+container runs as a non-root user and reports its health through `GET /health`.
 
 ## Data and licensing
 
