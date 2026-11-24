@@ -16,11 +16,12 @@ change in a way that would break existing users, the new shape goes under /v2 an
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 
-from fundrag import __version__
+from fundrag import __version__, config, db
 from fundrag.api.schemas import (
     FundDetail,
     FundPage,
@@ -35,7 +36,21 @@ from fundrag.collect.identify import isin_is_valid
 from fundrag.collect.universe import Product
 from fundrag.parse.pipeline import ParsedDocument
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Code before `yield` runs once when the server starts, code after it once at shutdown.
+
+    If a database is configured, make sure the manifest table exists, so that a fresh,
+    empty Postgres (the first `docker compose up`) works without a manual step.
+    """
+    if config.DATABASE_URL:
+        db.ensure_schema()
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="fund explorer API",
     version=__version__,
     description=(

@@ -1,0 +1,62 @@
+# Docker Compose: start several containers that belong together with one command.
+#
+#   docker compose up --build -d   build the API image, start Postgres and the API
+#   docker compose ps              which containers run, and are they healthy?
+#   docker compose logs -f api     follow the API's output (Ctrl+C stops following)
+#   docker compose down            stop and remove the containers (the data stays)
+#
+# Before the first start: copy .env.example to .env and choose a password.
+# Compose reads .env automatically and fills in ${POSTGRES_PASSWORD} below.
+#
+# Compose also creates a private network for these services. On it, each container
+# can reach the others by service name: the API connects to the host name "db".
+
+name: fund-explorer
+
+services:
+  # ------------------------------------------------------------------ the database
+  db:
+    image: postgres:18 # the official image from Docker Hub; downloaded on first use
+    environment:
+      # On its very first start (empty volume), the image creates this user and database.
+      POSTGRES_USER: fundrag
+      POSTGRES_DB: fundrag
+      # ":?" = stop with this message if the variable is missing.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy .env.example to .env and set POSTGRES_PASSWORD}
+    volumes:
+      # A named volume: storage that Docker manages and that outlives the container.
+      # `docker compose down` keeps it; only `docker compose down -v` deletes it.
+      # (Postgres 18+ wants it at /var/lib/postgresql; 17 and older used .../data.)
+      - pgdata:/var/lib/postgresql
+    ports:
+      # host:container. Lets programs on your laptop (pytest, a database GUI) reach
+      # Postgres at localhost:5432. "127.0.0.1:" = only from this laptop, not from
+      # other machines on your Wi-Fi.
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      # "Is Postgres ready to accept connections?" The API waits until it is.
+      test: ["CMD-SHELL", "pg_isready -U fundrag -d fundrag"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # ------------------------------------------------------------------ the REST API
+  api:
+    build: . # build the image from the Dockerfile in this folder
+    image: fund-explorer-api # ... and give it the same name as with `docker build -t`
+    environment:
+      # "db" is the service name above, 5432 the port inside the network.
+      FUNDRAG_DATABASE_URL: postgresql://fundrag:${POSTGRES_PASSWORD}@db:5432/fundrag
+    volumes:
+      # The universe CSV, the PDFs and the parsed KIDs still come from your data folder.
+      # (They move to object storage, MinIO, in the next part of stage C.)
+      - ./data:/data
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy # start only after the healthcheck above passes
+
+volumes:
+  pgdata:

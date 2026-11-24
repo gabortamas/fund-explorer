@@ -4,46 +4,49 @@ A portfolio project: help ordinary investors understand and compare EU retail fu
 using the documents every such fund must publish, mainly the PRIIPs Key Information
 Document (KID). The assistant informs; it does not recommend what to buy.
 
-## Current state and next steps (as of 22 Nov 2026)
+## Current state and next steps (as of 24 Nov 2026)
 
 **Where things stand**
 
-- **Corpus:** 24 iShares funds in `data/universe/ishares_v1.csv`; 3 of them have a KID
-  (IE00B4L5Y983 MSCI World, IE00B4WXJJ64 EUR Govt Bond, IE00B1XNHC34 Global Clean
-  Energy Transition), all dated 2026-09-03 and parsed into sections. Their links were
-  found by hand. The other 21 have no `kid_url` yet: iShares links contain the fund
-  name, so they cannot be built from the ISIN alone.
-- **RAG track:** steps 1 (collection) and 2 (parsing) done. No LLM calls yet.
+- **Corpus:** 24 iShares funds in `data/universe/ishares_v1.csv`, all 24 with a clean
+  English PRIIPs KID, parsed into 17 sections each. 3 were collected by hand, 21 by the
+  collector agent. KID dates range from 2026-04-09 to 2026-09-21.
+- **Collector agent (step 10, moved to the front):** works. On 22-24 Nov it found all
+  21 missing KIDs, nearly always on its first or second candidate link, with 14 web
+  searches in total. A dry run on the 3 hand-collected funds found the same files, but
+  2 of those 3 were named in the prompt's examples at the time (since removed), so
+  only one of them counts as a fair test.
+- **RAG track:** steps 1 (collection) and 2 (parsing) done.
 - **Infrastructure track:** stages A (housekeeping) and B (read-only REST API) done;
-  stage C has its first part, the `Dockerfile`.
-- **Tests:** 36, all passing (`uv run pytest`).
+  stage C has the `Dockerfile` and `docker-compose.yml` (API + Postgres). The manifest
+  can now live in a Postgres table (`fundrag db init`, `fundrag db import`).
+  **Parked on purpose** until there is something that needs it (parallel runs in
+  stage D). Without `FUNDRAG_DATABASE_URL` everything works without Docker.
+- **Tests:** 78 (`uv run pytest`; some run once per real KID); 4 of them need a running
+  Postgres and are skipped unless `FUNDRAG_TEST_DATABASE_URL` is set (see "Running with Docker Compose").
 - **Environment:** Windows laptop, project in `C:\Projects\fund_explorer`, Python 3.14,
   uv, Docker Desktop on WSL 2. Code on GitHub: `gabortamas/fund-explorer` (public;
   the KID files stay local).
 
 **Known limits of the current design**
 
-- The manifest is a JSONL file appended to by whichever process runs. Two processes
-  writing at once (parallel Airflow tasks, several containers) could corrupt it.
+- Without `FUNDRAG_DATABASE_URL` the manifest is still the JSONL file, which two
+  processes must not write at once. Anything that runs in parallel (Airflow, several
+  containers) must use Postgres.
 - PDFs and parsed files live in local folders, which containers in Kubernetes do not
   share by default.
-- Finding KID links is manual, so the corpus cannot grow without someone searching.
+- The agent's search knowledge is iShares-specific (the system prompt and the list of
+  issuer websites in `collect/verify.py`). A new issuer needs both extended.
 
 **Next steps, in order**
 
-1. **Stage C, part 2: Docker Compose with Postgres.** One `docker-compose.yml` that
-   starts the API and a Postgres database together. Move the manifest from
-   `manifest.jsonl` into a Postgres table, with a one-off script that imports the
-   existing records. In the API only `src/fundrag/api/store.py` should need to change.
-   File storage (MinIO) comes after that.
-2. **Collector (step 10, moved forward).** Input: an ISIN; output: a verified KID.
-   First a plain rule that reads the issuer's own fund listings, then an agent (Claude
-   API with web search) for funds the rule cannot handle. Every candidate PDF must pass
-   the existing checks in `collect/identify.py` before it is stored. Evaluated against
-   the three hand-collected links.
-3. **Stage D: Airflow.** A DAG that collects, identifies and parses, one mapped task
-   per fund, running in Docker Compose.
-4. **RAG steps 3 onwards**, each adding a DAG task and an API endpoint as it lands.
+1. **RAG step 3 onwards:** structured field extraction from the KIDs, then chunking,
+   index and a naive RAG baseline.
+2. **Collector, later:** a fair re-run of the 3-fund evaluation; a "newest version"
+   check (the agent accepts the first valid KID it finds, not necessarily the newest);
+   a cheap rule before the agent once the corpus covers hundreds of funds.
+3. **Infrastructure, when it is needed:** MinIO (stage C part 3); Airflow (stage D), a
+   DAG that collects, identifies and parses, one task per fund.
 
 ## Architecture (target)
 
@@ -68,7 +71,7 @@ Document (KID). The assistant informs; it does not recommend what to buy.
 | 7 | Profiler, screener, writer, verifier | |
 | 8 | Graph layer | |
 | 9 | UI, tracing, write-up | |
-| 10 | Collector agent: ISIN in, verified KID out (evaluated against the hand-collected links) | |
+| 10 | Collector agent: ISIN in, verified KID out (evaluated against the hand-collected links) | done (moved forward) |
 
 ## Infrastructure track
 
@@ -78,7 +81,7 @@ Alongside the RAG steps, the project is a hands-on tutorial in serving and runni
 |---|---|---|
 | A | Housekeeping: locked dependencies, data path that works in containers, GitHub remote | done |
 | B | Read-only REST API (FastAPI) over the corpus | done |
-| C | Docker image, then Docker Compose with Postgres and MinIO | image done |
+| C | Docker image, then Docker Compose with Postgres and MinIO | image, Postgres done; parked |
 | D | Airflow DAG: collect, identify, parse, one task per fund | |
 | E | Kubernetes, Helm, Airflow on Kubernetes, Argo Workflows | |
 
@@ -112,9 +115,53 @@ version is listed in `data/manifest.jsonl` with its source URL, SHA-256 and retr
 A re-issued KID becomes a new version; an identical re-download is ignored.
 
 Note: the UK site of an issuer serves UK-style KIIDs, not EU PRIIPs KIDs. Use an EU
-country site. The collector flags a KIID if one slips in. iShares country-site links
-(`ishares.com/<country>/.../literature/kiid/...`) are rewritten automatically to
-BlackRock's direct file server, which needs no cookie.
+country site; the Luxembourg site in English (`blackrock.com/lu/individual/en/...`) has
+English PRIIPs KIDs. The collector flags a KIID if one slips in. Country-site links
+(`ishares.com/<country>/.../literature/kiid/...` and the same on `blackrock.com`) are
+rewritten automatically to BlackRock's direct file server, which needs no cookie.
+
+## Step 1b: the collector agent finds KIDs for you
+
+```bash
+fundrag find IE00B0M62Q58            # one fund (or several ISINs)
+fundrag find --missing               # every fund in the universe without a KID
+fundrag find --dry-run IE00B4L5Y983  # check what it finds, but store nothing
+```
+
+The agent gets a goal ("the English PRIIPs KID of this ISIN"), three tools and a
+budget, and decides step by step what to do:
+
+| Tool | Runs where | What it does |
+|---|---|---|
+| `web_search` | at Anthropic | searches the web ($10 per 1000 searches; at most 5 per fund) |
+| `web_fetch` | at Anthropic | reads a page on the issuer's own website (at most 5 per fund) |
+| `try_kid_url` | on your laptop | downloads a candidate PDF and runs the checks of step 1 |
+
+Only `try_kid_url` can store a document, and only if the file is on the issuer's own
+website, is an English PRIIPs KID and names the right ISIN (`collect/verify.py`).
+A rejection tells the agent why, so it can try again (at most 6 candidates per fund).
+The terminal shows each step; the full record of every run, with token counts, is
+saved in `data/agent_runs/`. The code is in `collect/agent.py`; `tests/test_agent.py`
+tests the loop with a fake web and a scripted fake Claude, so the tests cost nothing.
+
+The model is `claude-sonnet-5-5` unless `--model` or `FUNDRAG_AGENT_MODEL` says
+otherwise (for example `claude-haiku-5-5`, cheaper).
+
+**Getting an API key** (once):
+
+1. Go to https://platform.claude.com and sign in or create an account. This is the
+   Claude Console, an account separate from a claude.ai subscription.
+2. Settings → Billing → "Buy credits". The API is prepaid. Start small (say $5) and
+   look at the token counts of the first runs before running all 21 funds.
+3. Settings → API keys → "Create key". Copy it right away; it is shown only once.
+4. Store it as an environment variable for your Windows user, in PowerShell:
+
+   ```powershell
+   setx ANTHROPIC_API_KEY "sk-ant-..."
+   ```
+
+   then close and reopen the terminal (setx only affects new windows). Check with
+   `echo $env:ANTHROPIC_API_KEY`. Never put the key into a file in this repository.
 
 ## Step 2: parsing KIDs into sections
 
@@ -164,6 +211,45 @@ The image holds the code and its exact dependencies but no data. `-v` attaches t
 local `data/` folder at `/data` inside the container (where `FUNDRAG_DATA_DIR` points),
 and `-p 8000:8000` connects port 8000 on the host to the API in the container. The
 container runs as a non-root user and reports its health through `GET /health`.
+
+## Running with Docker Compose (API + Postgres)
+
+```powershell
+copy .env.example .env               # once; then put your own password into .env
+docker compose up --build -d         # build the image, start Postgres and the API
+docker compose exec api fundrag db import    # once: copy manifest.jsonl into Postgres
+docker compose exec api fundrag status       # first line: "Manifest: Postgres ..."
+```
+
+Then open http://127.0.0.1:8000/docs as before. `docker compose ps` shows both
+containers and whether they are healthy; `docker compose logs -f api` shows the API's
+output; `docker compose down` stops everything. The database lives in the Docker volume
+`pgdata` and survives `down`; `docker compose down -v` deletes it (then run the import
+again).
+
+Where the manifest lives depends on one environment variable:
+
+| `FUNDRAG_DATABASE_URL` | Manifest | Typical use |
+|---|---|---|
+| set | the `manifest` table in that Postgres database | inside Compose (set for you) |
+| not set | `data/manifest.jsonl` | quick work on the laptop, the tests |
+
+So after the switch, run corpus commands *inside* the API container, where the
+variable is set: `docker compose exec api fundrag download` (or `inbox`, `parse`).
+A plain `uv run fundrag download` on the laptop would write to the JSONL file instead;
+`fundrag db import` picks such records up later (it skips the ones already imported).
+To point laptop commands at the Compose database instead (PowerShell, this window only):
+
+```powershell
+$env:FUNDRAG_DATABASE_URL = "postgresql://fundrag:<password>@localhost:5432/fundrag"
+uv run fundrag status
+$env:FUNDRAG_TEST_DATABASE_URL = $env:FUNDRAG_DATABASE_URL
+uv run pytest                        # now also runs tests/test_db.py against Postgres
+```
+
+`tests/test_db.py` works in a throw-away schema and never touches the real table.
+If port 5432 is taken (a Postgres installed directly on Windows), change the left
+number in `"127.0.0.1:5432:5432"` and in the URL.
 
 ## Data and licensing
 

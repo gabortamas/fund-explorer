@@ -11,6 +11,14 @@ def test_ishares_country_link_is_rewritten():
     assert normalize_url(nl) == BLK + "eu-priips-ishares-x-ucits-etf-usd-dist-ie00b1xnhc34-en.pdf"
 
 
+def test_blackrock_country_link_is_rewritten():
+    lu = (
+        "https://www.blackrock.com/lu/individual/literature/kiid/"
+        "eu-priips-ishares-nasdaq-100-ucits-etf-usd-acc-ie00b53szb19-en.pdf"
+    )
+    assert normalize_url(lu) == BLK + "eu-priips-ishares-nasdaq-100-ucits-etf-usd-acc-ie00b53szb19-en.pdf"
+
+
 def test_blackrock_and_other_links_are_left_alone():
     url = BLK + "eu-priips-ishares-core-msci-world-ucits-etf-ie00b4l5y983-en.pdf"
     assert normalize_url(url) == url

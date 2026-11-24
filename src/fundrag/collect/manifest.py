@@ -5,9 +5,18 @@ produce later will point back to a `doc_id` here, so an answer can say exactly w
 document version (and which download) it came from.
 
 Design choices:
-  * Append-only JSONL: easy to diff in git, nothing is ever silently overwritten.
+  * Records are only ever added, never changed: nothing is silently overwritten.
   * `doc_id` is derived from the file's SHA-256, so the same PDF downloaded twice
     is recognised as the same document, and a re-issued KID gets a new id.
+
+Where the records are kept (the "backend"):
+  * Postgres, if FUNDRAG_DATABASE_URL is set (see fundrag/db.py), else
+  * the JSONL file data/manifest.jsonl, one JSON object per line.
+
+The rule for the functions below: pass `manifest_path` and you get that JSONL file
+(the tests and `fundrag db import` do this); pass nothing and you get whichever
+backend is configured. The CLI, the parser and the API pass nothing, so all of them
+switch to Postgres together when the variable is set.
 """
 
 from __future__ import annotations
@@ -20,7 +29,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from fundrag import config
+from fundrag import config, db
 from fundrag.collect.identify import PdfInspection
 
 
@@ -51,7 +60,20 @@ def sha256_of(path: Path) -> str:
     return h.hexdigest()
 
 
+def _use_db(manifest_path: Path | None) -> bool:
+    return manifest_path is None and config.DATABASE_URL is not None
+
+
+def location(manifest_path: Path | None = None) -> str:
+    """Human-readable answer to "where is the manifest right now?"."""
+    if _use_db(manifest_path):
+        return db.describe()
+    return str(manifest_path or config.MANIFEST_PATH)
+
+
 def load(manifest_path: Path | None = None) -> list[ManifestRecord]:
+    if _use_db(manifest_path):
+        return [ManifestRecord.model_validate(row) for row in db.load_all()]
     manifest_path = manifest_path or config.MANIFEST_PATH
     if not manifest_path.exists():
         return []
@@ -60,6 +82,8 @@ def load(manifest_path: Path | None = None) -> list[ManifestRecord]:
 
 
 def known_hashes(manifest_path: Path | None = None) -> set[str]:
+    if _use_db(manifest_path):
+        return db.known_hashes()
     return {r.sha256 for r in load(manifest_path)}
 
 
@@ -80,7 +104,7 @@ def store(
     Duplicates (same SHA-256 already in the manifest) are not stored again.
     """
     data_dir = data_dir or config.DATA_DIR
-    manifest_path = manifest_path or config.MANIFEST_PATH
+    use_db = _use_db(manifest_path)
 
     digest = sha256_of(tmp_file)
     if digest in known_hashes(manifest_path):
@@ -116,9 +140,17 @@ def store(
         path=rel_path.as_posix(),
         problems=problems,
     )
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    with manifest_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record.model_dump(mode="json"), ensure_ascii=False) + "\n")
+    if use_db:
+        # The database refuses a second row with the same sha256. This catches the rare
+        # case where another process stored the same file a moment after our check above.
+        # (The file it copied is identical to ours and has the same name, so no harm.)
+        if not db.insert(record.model_dump()):
+            return None, "duplicate"
+    else:
+        manifest_path = manifest_path or config.MANIFEST_PATH
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        with manifest_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record.model_dump(mode="json"), ensure_ascii=False) + "\n")
     return record, "stored"
 
 

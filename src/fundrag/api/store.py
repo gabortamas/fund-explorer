@@ -2,12 +2,12 @@
 
 The API never opens files itself; it asks a FundStore. Why the extra layer?
   * Tests can hand the API a FundStore pointing at a small temporary folder.
-  * In stage C the manifest moves from a JSONL file into Postgres. Only this file
-    will change then; the endpoints in app.py will not notice.
+  * The manifest can live in a JSONL file or in Postgres (see collect/manifest.py);
+    the endpoints in app.py do not need to know which.
 
-The files are re-read on every request. They are tiny (a CSV, a few JSON files), so
-this costs microseconds and means the API never shows stale data after you run
-`fundrag download` or `fundrag parse`.
+The data is re-read on every request: the files are tiny (a CSV, a few JSON files)
+and the manifest query takes about a millisecond. In return the API never shows stale
+data after you run `fundrag download` or `fundrag parse`.
 """
 
 from __future__ import annotations
@@ -24,7 +24,9 @@ from fundrag.parse import pipeline
 @dataclass
 class FundStore:
     universe_path: Path = field(default_factory=lambda: config.DEFAULT_UNIVERSE)
-    manifest_path: Path = field(default_factory=lambda: config.MANIFEST_PATH)
+    # None = the configured manifest: Postgres if FUNDRAG_DATABASE_URL is set, otherwise
+    # data/manifest.jsonl. Tests pass a path to a small JSONL file instead.
+    manifest_path: Path | None = None
     processed_dir: Path = field(default_factory=lambda: config.PROCESSED_DIR / "kid")
 
     def products(self) -> list[Product]:

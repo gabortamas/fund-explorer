@@ -35,7 +35,14 @@ RAW_DIR = DATA_DIR / "raw"  # downloaded PDFs, one folder per issuer/ISIN
 INBOX_DIR = DATA_DIR / "inbox"  # drop manually downloaded PDFs here
 MANIFEST_PATH = DATA_DIR / "manifest.jsonl"  # one line per stored document version
 PROCESSED_DIR = DATA_DIR / "processed"  # parsed text and, later, extracted fields
+AGENT_RUNS_DIR = DATA_DIR / "agent_runs"  # one JSON record per collector-agent run
 DEFAULT_UNIVERSE = UNIVERSE_DIR / "ishares_v1.csv"
+
+# Where the manifest lives. If FUNDRAG_DATABASE_URL is set, in that Postgres database,
+# e.g. postgresql://fundrag:<password>@localhost:5432/fundrag (Docker Compose sets it for
+# the API container). If it is not set, in MANIFEST_PATH above, as before: handy for
+# quick work on the laptop without starting a database, and for the tests.
+DATABASE_URL = os.environ.get("FUNDRAG_DATABASE_URL") or None
 
 USER_AGENT = (
     "fundrag-research/0.1 (personal non-commercial research project; "

@@ -35,15 +35,17 @@ class Outcome:
 # Issuer adapters: tiny rules that turn a link you found into one that works without
 # cookies. The first collector layer: plain code, no LLM, for cases a rule can solve.
 _ISHARES_LITERATURE = re.compile(
-    r"^https?://(?:www\.)?ishares\.com/.+?/(?P<path>literature/(?:kiid|fact-sheet)/.+\.pdf)$",
+    r"^https?://(?:www\.)?(?:ishares|blackrock)\.com/(?!gls-download/)"
+    r".+?/(?P<path>literature/(?:kiid|fact-sheet)/.+\.pdf)$",
     re.IGNORECASE,
 )
 
 
 def normalize_url(url: str) -> str:
-    """Rewrite iShares country-site links to BlackRock's direct file server.
+    """Rewrite iShares and BlackRock country-site links to BlackRock's direct file server.
 
-    ishares.com/<country>/<investor type>/<lang>/literature/kiid/x.pdf sits behind an
+    ishares.com/<country>/<investor type>/<lang>/literature/kiid/x.pdf (and the same on
+    blackrock.com/<country>/...) sits behind an
     investor-type pop-up that needs a browser cookie; the same file is served without
     one at blackrock.com/gls-download/literature/kiid/x.pdf.
     """
