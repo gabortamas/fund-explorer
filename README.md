@@ -4,7 +4,7 @@ A portfolio project: help ordinary investors understand and compare EU retail fu
 using the documents every such fund must publish, mainly the PRIIPs Key Information
 Document (KID). The assistant informs; it does not recommend what to buy.
 
-## Current state and next steps (as of 24 Nov 2026)
+## Current state and next steps (as of 26 Nov 2026)
 
 **Where things stand**
 
@@ -16,13 +16,16 @@ Document (KID). The assistant informs; it does not recommend what to buy.
   searches in total. A dry run on the 3 hand-collected funds found the same files, but
   2 of those 3 were named in the prompt's examples at the time (since removed), so
   only one of them counts as a fair test.
-- **RAG track:** steps 1 (collection) and 2 (parsing) done.
+- **RAG track:** steps 1 (collection) and 2 (parsing) done. Step 3 (structured fields):
+  34 fields defined; answer key for 5 KIDs drafted from the PDFs (spot-check by hand still
+  to do); the rule-based extractor gets 100% of the answer key right and fills every
+  field for all 24 KIDs except one the KID does not state.
 - **Infrastructure track:** stages A (housekeeping) and B (read-only REST API) done;
   stage C has the `Dockerfile` and `docker-compose.yml` (API + Postgres). The manifest
   can now live in a Postgres table (`fundrag db init`, `fundrag db import`).
   **Parked on purpose** until there is something that needs it (parallel runs in
   stage D). Without `FUNDRAG_DATABASE_URL` everything works without Docker.
-- **Tests:** 78 (`uv run pytest`; some run once per real KID); 4 of them need a running
+- **Tests:** 98 (`uv run pytest`; some run once per real KID); 4 of them need a running
   Postgres and are skipped unless `FUNDRAG_TEST_DATABASE_URL` is set (see "Running with Docker Compose").
 - **Environment:** Windows laptop, project in `C:\Projects\fund_explorer`, Python 3.14,
   uv, Docker Desktop on WSL 2. Code on GitHub: `gabortamas/fund-explorer` (public;
@@ -40,12 +43,16 @@ Document (KID). The assistant informs; it does not recommend what to buy.
 
 **Next steps, in order**
 
-1. **RAG step 3 onwards:** structured field extraction from the KIDs, then chunking,
-   index and a naive RAG baseline.
-2. **Collector, later:** a fair re-run of the 3-fund evaluation; a "newest version"
+1. **Spot-check the answer key** (10 values against the PDFs; initials in `checked_by`).
+2. **RAG step 4:** chunking and a hybrid index over the KID sections; naive RAG baseline.
+3. **Claude extractor (step 3b), when a second issuer is added.** The rules are written
+   for iShares wording and were developed while looking at all 24 KIDs, so their 100% is
+   expected and says little about other issuers. A Claude extractor earns its place on
+   KIDs whose wording the rules have never seen; it is scored on the same answer key.
+4. **Collector, later:** a fair re-run of the 3-fund evaluation; a "newest version"
    check (the agent accepts the first valid KID it finds, not necessarily the newest);
    a cheap rule before the agent once the corpus covers hundreds of funds.
-3. **Infrastructure, when it is needed:** MinIO (stage C part 3); Airflow (stage D), a
+5. **Infrastructure, when it is needed:** MinIO (stage C part 3); Airflow (stage D), a
    DAG that collects, identifies and parses, one task per fund.
 
 ## Architecture (target)
@@ -64,7 +71,7 @@ Document (KID). The assistant informs; it does not recommend what to buy.
 |---|---|---|
 | 1 | Document collection with provenance manifest | done |
 | 2 | KID parsing into prescribed sections | done |
-| 3 | Structured KID field extraction + validation | |
+| 3 | Structured KID field extraction + validation | rules extractor done; Claude extractor later |
 | 4 | Chunking and hybrid index; naive RAG baseline | |
 | 5 | Golden question set and evaluation harness | |
 | 6 | Agentic retrieval loop | |
@@ -181,6 +188,23 @@ for citations. Text comes from pdfplumber, which keeps each table row on one lin
 
 `tests/test_corpus.py` runs the parser on your real KIDs; a KID with an unusual layout
 shows up as a failing test named after its ISIN.
+
+## Step 3: structured fields
+
+```bash
+fundrag extract      # 34 fields from every parsed KID -> data/processed/fields/rules.csv
+fundrag evaluate     # score against the answer key in data/gold/
+```
+
+The field list and its conventions are in `extract/schema.py`; the rule-based extractor
+in `extract/rules.py` (regular expressions on the PRIIPs template wording). `extract`
+also checks three rules every correct KID satisfies: scenarios ordered from worst to
+best, 1-year returns matching the amounts, and first-year costs matching the cost
+percentages. A broken rule points at a misread value even without an answer key.
+
+The answer key (`data/gold/kid_fields_gold.csv`, explained in `data/gold/README.md`)
+holds 5 deliberately different KIDs. It was drafted by reading the PDFs, not the parsed
+text the extractors use, and is being spot-checked by hand.
 
 ## The REST API
 

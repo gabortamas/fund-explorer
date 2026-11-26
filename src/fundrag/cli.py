@@ -23,6 +23,7 @@ JsonlOpt = typer.Option(config.MANIFEST_PATH, "--path", help="JSONL manifest to 
 IsinsArg = typer.Argument(None, help="ISINs to look for")
 MissingOpt = typer.Option(False, "--missing", help="Every fund in the universe without a KID")
 DryRunOpt = typer.Option(False, "--dry-run", help="Check the links found, but store nothing")
+MethodOpt = typer.Option("rules", "--method", help="Extractor: rules")
 ModelOpt = typer.Option(None, "--model", help="Claude model (default: FUNDRAG_AGENT_MODEL or claude-sonnet-5-5)")
 
 
@@ -194,6 +195,61 @@ def find(
     )
     if found and not dry_run:
         typer.echo("Next: `fundrag parse` to split the new KIDs into sections.")
+
+
+@app.command()
+def extract(method: str = MethodOpt) -> None:
+    """Pull the structured fields (step 3) out of every parsed KID."""
+    from fundrag.extract import table
+    from fundrag.extract.schema import COLUMNS, consistency_problems
+
+    if method not in table.EXTRACTORS:
+        raise typer.BadParameter(f"unknown method {method!r}; choose from {list(table.EXTRACTORS)}")
+    fields = table.extract_all(method)
+    if not fields:
+        typer.echo("No parsed KIDs. Run `fundrag parse` first.")
+        return
+    path = table.save(fields, method)
+    typer.echo(f"{len(fields)} KIDs -> {path}")
+
+    empty = {c: [i for i, f in fields.items() if getattr(f, c) is None] for c in COLUMNS}
+    empty = {c: isins for c, isins in empty.items() if isins}
+    if empty:
+        typer.echo("\nNot found (empty cells):")
+        for column, isins in empty.items():
+            typer.echo(f"  {column:<28} {len(isins):>2}  {', '.join(isins[:4])}")
+    flagged = {i: consistency_problems(f) for i, f in fields.items()}
+    flagged = {i: p for i, p in flagged.items() if p}
+    typer.echo(f"\nConsistency rules broken: {len(flagged)} of {len(fields)} KIDs")
+    for isin, problems in flagged.items():
+        for problem in problems:
+            typer.echo(f"  {isin}  {problem}")
+
+
+@app.command()
+def evaluate(method: str = MethodOpt) -> None:
+    """Score an extractor against the hand-made answer key (data/gold/)."""
+    from fundrag.extract import table
+    from fundrag.extract.evaluate import score
+    from fundrag.extract.gold import load_gold
+
+    gold = load_gold()
+    if not gold:
+        typer.echo("The answer key data/gold/kid_fields_gold.csv has no filled-in rows yet.")
+        raise typer.Exit(1)
+    result = score(table.extract_all(method), gold)
+    typer.echo(f"Method: {method}. Answer key: {result.n_funds} KIDs, "
+               f"{len(result.correct)} fields each.\n")
+    imperfect = {f: n for f, n in result.correct.items() if n < result.n_funds}
+    for f, n in imperfect.items():
+        typer.echo(f"  {f:<28} {n}/{result.n_funds}")
+    if not imperfect:
+        typer.echo("  every field correct for every KID")
+    typer.echo(f"\nOverall: {result.accuracy:.1%} of values correct.")
+    if result.mistakes:
+        typer.echo("\nMistakes (ISIN, field, answer key, extracted):")
+        for isin, f, expected, got in result.mistakes:
+            typer.echo(f"  {isin}  {f}: {expected!r} vs {got!r}")
 
 
 # ---------------------------------------------------------------------------
